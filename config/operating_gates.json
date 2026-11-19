@@ -4,7 +4,8 @@
   "business": {
     "daily_refund_cap_vnd": 800000,
     "cost_budget_per_ticket_vnd": 1100,
-    "pilot_scope": {"mode": "all", "warehouses": [], "percent": 100},
+    "_vong2": "S5: kho HCM-B2B (đơn sỉ 2–3 triệu, luôn vượt auto_limit 200.000đ) đưa ra làm tay; các kho còn lại vẫn trong pilot",
+    "pilot_scope": {"mode": "warehouse", "warehouses": ["HN", "HCM", "DN", "CT"], "percent": 100},
     "roi_min": 0.6
   },
   "operations": {

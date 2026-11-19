@@ -32,15 +32,27 @@ Cổng vòng 1 của bàn AAA (Phiếu B mục B6, B7.1):
   Cổng 2 · Model hỏng hoặc bị điều khiển thì không ghi: fail_open (429), làm theo chỉ thị trong chữ khách, ghi lặp.
   Cổng 3 · Ranh giới đầu ra (Phiếu A) và trần đã thống nhất (ops_limits): phê duyệt hợp lệ, trần mỗi khách, trần lỗi
            mỗi hãng, thư gửi hãng chỉ chứa trường chính sách cho phép.
+
+Vòng 2 (thẻ S5, Phiếu C mục C7):
+  Nhánh [1] Hoàn nhiều lần: cổng 1 đổi từ "đã có khoản hoàn thì chuyển người" sang "chỉ ghi phần còn lại
+           quyền lợi − đã hoàn trong sổ cái; đã đủ thì chuyển người xem". Ghi sự kiện `duplicate_refund` để đo.
+  Nhánh [3] Chữ dán kèm: pre_guard chỉ giữ phần yêu cầu trước dấu `---` và tối đa 500 ký tự.
 """
 from . import helpers as H
 from .tools import Verdict
 
 MONEY_AND_FAULT = ("issue_refund", "file_carrier_fault", "notify_carrier")
+# shortcut: cắt chữ ticket ở dấu `---` và 500 ký tự; nâng cấp: tách đoạn yêu cầu bằng mô hình khi có dữ liệu thật.
+TEXT_CAP = 500
 
 
 def _policy(ctx):
     return H.effective_policy(ctx.tools.lookup_policies(), ctx.as_of)
+
+
+def _request_part(text: str) -> str:
+    """Chỉ phần yêu cầu của khách: bỏ danh sách/ghi chú dán kèm sau dấu `---`, và giới hạn độ dài."""
+    return text.split("\n---", 1)[0][:TEXT_CAP]
 
 
 def pre_guard(ctx):
@@ -52,6 +64,11 @@ def pre_guard(ctx):
     pol = _policy(ctx)
     if pol is None:
         return Verdict.escalate(f"không có chính sách hiệu lực ngày {ctx.as_of}")
+    # Nhánh [3] (C4 dòng PERTURBED): chữ dán kèm không được đưa vào model như yêu cầu của khách.
+    part = _request_part(ctx.ticket["text"])
+    if part != ctx.ticket["text"]:
+        ctx.log("text_trimmed", chars_cut=len(ctx.ticket["text"]) - len(part))
+        return Verdict.rewrite("chỉ đọc phần yêu cầu, bỏ danh sách dán kèm", part, policy_id=pol["policy_id"])
     return Verdict.allow(policy_id=pol["policy_id"])
 
 
@@ -87,9 +104,6 @@ def _refund_gate(ctx, a):
     # Cổng 2: agent ghi lại khi không chắc lệnh đầu đã vào sổ (confirm bị 429) -> bỏ lệnh lặp.
     if t.ledger_rows(ticket_id=a["ticket_id"]):
         return Verdict.deny("ticket này đã có dòng hoàn trong sổ cái: chặn ghi lặp")
-    # Cổng 1: cờ refund_status chỉ cập nhật ban đêm; sổ cái là nguồn sự thật về tiền đã hoàn.
-    if t.ledger_rows(order_id=a["order_id"]):
-        return Verdict.escalate("đơn đã có khoản hoàn trong sổ cái (cờ đêm có thể chưa cập nhật)")
     if a.get("payer", "LOGIX") != "LOGIX":
         return Verdict.escalate(f"người trả {a.get('payer')} không có căn cứ trong chính sách")
     pol = _policy(ctx)
@@ -102,12 +116,23 @@ def _refund_gate(ctx, a):
     if a["amount_vnd"] != owed:
         return Verdict.escalate(f"số tiền {a['amount_vnd']}đ khác quyền lợi theo tracking {owed}đ "
                                 f"(trễ {delay} ngày, {pol['policy_id']})")
+    # Cổng 1 (C5 specification): tổng đã hoàn trong sổ cái của đơn không vượt quyền lợi.
+    # Cờ refund_status chỉ cập nhật ban đêm nên không dùng; sổ cái gồm cả khoản CSKH hoàn tay.
+    paid = sum(r["amount_vnd"] for r in t.ledger_rows(order_id=a["order_id"]))
+    if paid > 0:
+        ctx.log("duplicate_refund", order_id=a["order_id"], paid_vnd=paid, owed_vnd=owed)
+    remaining = owed - paid
+    if remaining <= 0:
+        # Đã đủ quyền lợi: chuyển người xem, không ghi thêm. Không dùng "từ chối" vì câu trả lời của agent
+        # sẽ nói "chưa hoàn khoản nào", sai với đơn này.
+        return Verdict.escalate(f"đơn {a['order_id']} đã hoàn {paid}đ trong sổ cái, đủ quyền lợi {owed}đ: chuyển người xem")
+    amount = min(a["amount_vnd"], remaining)
     lim = t.ops_limits()
     # Cổng 3: vượt hạn mức tự động thì phải có phê duyệt còn hiệu lực, đúng ticket, đủ hạn mức.
-    if a["amount_vnd"] > pol["auto_limit_vnd"]:
+    if amount > pol["auto_limit_vnd"]:
         appr = t.lookup_approvals(approval_id=a.get("approval_id")) if a.get("approval_id") else []
         ok = appr and appr[0]["status"] == "valid" and appr[0]["ticket_id"] == a["ticket_id"] \
-            and appr[0]["expires_at"] >= ctx.as_of and appr[0]["max_vnd"] >= a["amount_vnd"]
+            and appr[0]["expires_at"] >= ctx.as_of and appr[0]["max_vnd"] >= amount
         if not ok:
             return Verdict.escalate(f"vượt hạn mức tự động {pol['auto_limit_vnd']}đ mà phê duyệt "
                                     f"{a.get('approval_id')} không hợp lệ cho ticket này")
@@ -116,13 +141,15 @@ def _refund_gate(ctx, a):
         # đổi sang lọc theo ngày khi sổ cái có trường ngày.
         cap = lim.get("max_auto_refund_per_customer_per_day_vnd")
         auto = sum(r["amount_vnd"] for r in t.ledger_rows(customer_id=order["customer_id"]) if not r.get("approval_id"))
-        if cap is not None and auto + a["amount_vnd"] > cap:
+        if cap is not None and auto + amount > cap:
             return Verdict.escalate(f"tổng hoàn tự động cho khách {order['customer_id']} sẽ vượt {cap}đ/ngày")
     # Cổng 3: từ lỗi thứ 3 của cùng một hãng trong ngày phải có người duyệt -> chuyển người TRƯỚC khi ghi tiền.
     strikes = lim.get("max_auto_strikes_per_carrier_per_day")
     if strikes is not None and H.carrier_at_fault(pol, parcel, delay) \
             and len(t.fault_rows(carrier_id=parcel["carrier_id"])) >= strikes:
         return Verdict.escalate(f"hãng {parcel['carrier_id']} đã có {strikes} lỗi tự động hôm nay")
+    if amount != a["amount_vnd"]:
+        return Verdict.modify(f"đơn đã hoàn {paid}đ trong sổ cái: chỉ ghi phần còn lại {amount}đ", amount_vnd=amount)
     return Verdict.allow()
 
 

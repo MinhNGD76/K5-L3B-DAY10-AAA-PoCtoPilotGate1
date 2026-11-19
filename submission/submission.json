@@ -1,12 +1,17 @@
 {
-  "team": "",
-  "members": [],
-  "incident": "",
-  "decision_v1": "",
-  "decision_v2": "",
+  "team": "K5-L3B-DAY10-AAA-PoCtoPilotGate1",
+  "members": [
+    "NguyenDinhMinh-2A202603898",
+    "NguyenNhatMinh-2A202603745",
+    "PhamTheHung-2A202603778",
+    "NgoDuyKhanh-2A202603870"
+  ],
+  "incident": "S5",
+  "decision_v1": "Tiếp tục",
+  "decision_v2": "Thu hẹp",
   "three_lines": {
-    "environment_assumption": "",
-    "reduce_or_prevent": "",
-    "measure_in_pilot": ""
+    "environment_assumption": "Mọi khoản hoàn tiền thật, dù CSKH làm tay hay trợ lý làm, đều vào sổ cái ngay lúc hoàn, đúng số và đúng đơn, trước khi ticket tiếp theo của cùng đơn tới.",
+    "reduce_or_prevent": "Với tiền hoàn trùng và hoàn quá quyền lợi thì NGĂN trong phạm vi sổ cái (hoàn sai 0 trên gói S5 sau sửa); với chi phí và độ phủ thì chỉ GIẢM (cắt kho sỉ, cắt chữ dán kèm); không NGĂN khoản hoàn tay chưa vào sổ cái.",
+    "measure_in_pilot": "Thời gian từ lúc CSKH hoàn tay đến lúc có trong sổ cái (đối soát của chị Oanh); số ca hoàn trùng qua đối soát; chi phí mỗi ticket theo kho với chi phí LLM thật thay cho MockLLM."
   }
 }
