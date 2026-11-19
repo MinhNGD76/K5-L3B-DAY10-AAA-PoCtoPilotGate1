@@ -1,0 +1,30 @@
+{
+  "_huong_dan": "Cổng kinh doanh, vận hành, pháp lý mà trợ lý PHẢI tuân theo. Bàn điền ở vòng 1, chốt bằng python3 -m lab10.checkpoint, rồi được sửa tiếp ở vòng 2. null = chưa đặt cổng này. Giải thích từng dòng: docs/guide.md, mục Cổng trong config (#ban-do).",
+  "_ly_do": "Bàn AAA, vòng 1. Lý do từng con số: Phiếu B mục B7.4 (business), B7.5 (operations, legal).",
+  "business": {
+    "daily_refund_cap_vnd": 800000,
+    "cost_budget_per_ticket_vnd": 1100,
+    "pilot_scope": {"mode": "all", "warehouses": [], "percent": 100},
+    "roi_min": 0.6
+  },
+  "operations": {
+    "pic": "NV-TUNG",
+    "approver_id": "NV-HANH",
+    "reviewers_on_shift": 1,
+    "review_capacity_per_hour": 6,
+    "max_queue_wait_minutes": 60,
+    "stop_conditions": [
+      "Hoàn sai > 0đ, lỗi hãng oan > 0 hoặc lộ dữ liệu cá nhân > 0 sau một vòng sửa: NV-TUNG tắt tool gây hại trong config/switches.json trong 15 phút, mọi ticket chuyển NV-HANH.",
+      "Có ca chờ người duyệt quá 60 phút ở hai lần chạy liền: thu hẹp pilot_scope (percent 50) cho tới khi thêm người trực.",
+      "Tổng hoàn tự động trong ngày chạm 800.000đ: dừng hoàn tự động tới hết ngày, phần còn lại chờ NV-HANH duyệt.",
+      "Chi phí mỗi ticket > 10.000đ (đắt hơn làm tay) ở bất kỳ kho nào: rút kho đó khỏi pilot_scope."
+    ],
+    "alert_channel": "Nhóm chat #pilot-hoan-tien (NV-TUNG, NV-HANH, NV-OANH); ĐỎ thì gọi điện NV-TUNG",
+    "decision_note": true,
+    "review_sampling_pct": 10
+  },
+  "legal": {
+    "pii_fields_blocked_to_third_party": ["customer_note", "recipient_contact"],
+    "carrier_fault_requires_recorded_cause": true
+  }
+}
